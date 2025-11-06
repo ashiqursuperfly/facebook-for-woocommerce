@@ -256,8 +256,15 @@ async function createTestProduct(options = {}) {
       console.log(`✅ ${result.message}`);
       console.log(`   Name: ${result.product_name}`);
       console.log(`   SKU: ${result.sku}`);
-      console.log(`   Price: ${result.price}`);
-      console.log(`   Stock: ${result.stock}`);
+
+      if (productType === 'simple') {
+        console.log(`   Price: ${result.price}`);
+        console.log(`   Stock: ${result.stock}`);
+      }
+      else {
+        console.log(`   Variations: ${result.variation_count}`);
+        console.log(`   VariationIds: ${result.variation_ids}`);
+      }
 
       return {
         productId: result.product_id,
