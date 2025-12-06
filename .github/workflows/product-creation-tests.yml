@@ -43,7 +43,6 @@ env:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     services:
       mysql:
@@ -165,6 +164,13 @@ jobs:
 
           echo "✅ Created catalog with ID: $CATALOG_ID"
           echo "FB_PRODUCT_CATALOG_ID=$CATALOG_ID" >> $GITHUB_ENV
+
+      # - name: Connect Pixel to Facebook Catalog
+      #   run: |
+      #     curl -sS -X POST \
+      #       -H "Content-Type: application/json" \
+      #       -d "{\"external_event_sources\": [\"${{ secrets.FB_PIXEL_ID }}\"], \"access_token\": \"${{ secrets.FB_ACCESS_TOKEN_NEW }}\"}" \
+      #       "https://graph.facebook.com/v21.0/${{ env.FB_PRODUCT_CATALOG_ID }}/external_event_sources"
 
       - name: Install WP-CLI
         run: |
@@ -498,7 +504,6 @@ jobs:
             ${{ env.WORDPRESS_PATH }}/wp-content/wc-logs/
             ${{ env.WORDPRESS_PATH }}/wp-content/uploads/wc-logs/
           retention-days: 7
-          if-no-files-found: ignore
 
       - name: Upload test videos/screenshots
         uses: actions/upload-artifact@v4
