@@ -147,7 +147,7 @@ jobs:
 
           echo "Creating Facebook product catalog..."
           RESPONSE=$(curl -s -X POST \
-            "https://graph.facebook.com/v21.0/${{ secrets.FB_BUSINESS_MANAGER_ID }}/owned_product_catalogs" \
+            "https://graph.facebook.com/v24.0/${{ secrets.FB_BUSINESS_MANAGER_ID }}/owned_product_catalogs" \
             -d "name=$CATALOG_NAME" \
             -d "vertical=commerce" \
             -d "access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}" )
@@ -165,12 +165,126 @@ jobs:
           echo "✅ Created catalog with ID: $CATALOG_ID"
           echo "FB_PRODUCT_CATALOG_ID=$CATALOG_ID" >> $GITHUB_ENV
 
-      # - name: Connect Pixel to Facebook Catalog
-      #   run: |
-      #     curl -sS -X POST \
-      #       -H "Content-Type: application/json" \
-      #       -d "{\"external_event_sources\": [\"${{ secrets.FB_PIXEL_ID }}\"], \"access_token\": \"${{ secrets.FB_ACCESS_TOKEN_NEW }}\"}" \
-      #       "https://graph.facebook.com/v21.0/${{ env.FB_PRODUCT_CATALOG_ID }}/external_event_sources"
+      - name: Add Test Product to Catalog (Required for Product Sets)
+        run: |
+          echo "================================================================"
+          echo "🔍 TESTING: Can we create product sets on newly created catalog?"
+          echo "================================================================"
+          echo ""
+          echo "Step 1: Adding a test product to the catalog..."
+          echo "Why? Meta API requires at least one product before creating product sets"
+
+          # Upload product to catalog using form-encoded parameters (not JSON)
+          echo "Uploading test product to catalog ${{ env.FB_PRODUCT_CATALOG_ID }}..."
+          PRODUCT_RESPONSE=$(curl -s -X POST \
+            "https://graph.facebook.com/v24.0/${{ env.FB_PRODUCT_CATALOG_ID }}/products" \
+            -d "retailer_id=test-product-001" \
+            -d "name=Test Product" \
+            -d "description=Test product for product set validation" \
+            -d "availability=in stock" \
+            -d "condition=new" \
+            -d "price=1999" \
+            -d "currency=USD" \
+            -d "link=https://test.example.com/product/test" \
+            -d "image_link=https://via.placeholder.com/600x600" \
+            -d "image_url=https://via.placeholder.com/600x600" \
+            -d "brand=Test Brand" \
+            -d "access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
+
+          echo "Product creation response: $PRODUCT_RESPONSE"
+
+          PRODUCT_ID=$(echo "$PRODUCT_RESPONSE" | jq -r '.id // empty')
+          if [ -n "$PRODUCT_ID" ]; then
+            echo "✅ Successfully added test product with ID: $PRODUCT_ID"
+            echo "TEST_CATALOG_PRODUCT_ID=$PRODUCT_ID" >> $GITHUB_ENV
+          else
+            echo "⚠️ Could not add product to catalog"
+            echo "Full Response: $PRODUCT_RESPONSE"
+          fi
+          echo ""
+
+      - name: Test Product Set Creation on Empty vs Non-Empty Catalog
+        run: |
+          echo "Step 2: Now attempting to create product set..."
+          echo ""
+
+          # Product set data matching the plugin's structure
+          PRODUCT_SET_NAME="Test-Category"
+          RETAILER_ID="test-retailer-id-123"
+
+          # Build the filter JSON (matches WooCommerce plugin logic)
+          FILTER_JSON='{"and": [{"product_type": {"i_contains": "Test-Category"}}]}'
+          METADATA_JSON='{"description": "Test product set for E2E testing", "external_url": "https://test.example.com/category/test"}'
+
+          echo "Creating product set with:"
+          echo "  Catalog ID: ${{ env.FB_PRODUCT_CATALOG_ID }}"
+          echo "  Name: $PRODUCT_SET_NAME"
+          echo "  Retailer ID: $RETAILER_ID"
+          echo "  Filter: $FILTER_JSON"
+
+          # Create product set via Facebook Graph API
+          RESPONSE=$(curl -s -X POST \
+            "https://graph.facebook.com/v24.0/${{ env.FB_PRODUCT_CATALOG_ID }}/product_sets" \
+            -H "Content-Type: application/json" \
+            -d "name=$PRODUCT_SET_NAME" \
+            -d "retailer_id=$RETAILER_ID" \
+            --data-urlencode "filter=$FILTER_JSON" \
+            --data-urlencode "metadata=$METADATA_JSON" \
+            -d "access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
+
+          echo "Response: $RESPONSE"
+
+          # Check if product set was created successfully
+          PRODUCT_SET_ID=$(echo "$RESPONSE" | jq -r '.id // empty')
+          ERROR_MESSAGE=$(echo "$RESPONSE" | jq -r '.error.message // empty')
+          ERROR_CODE=$(echo "$RESPONSE" | jq -r '.error.code // empty')
+          ERROR_SUBCODE=$(echo "$RESPONSE" | jq -r '.error.error_subcode // empty')
+          ERROR_USER_TITLE=$(echo "$RESPONSE" | jq -r '.error.error_user_title // empty')
+          ERROR_USER_MSG=$(echo "$RESPONSE" | jq -r '.error.error_user_msg // empty')
+
+          echo ""
+          echo "================================================================"
+          if [ -n "$PRODUCT_SET_ID" ]; then
+            echo "✅ SUCCESS: Product set created with ID: $PRODUCT_SET_ID"
+            echo "================================================================"
+            echo ""
+            echo "📝 FINDING: Product sets CAN be created after adding products to catalog"
+            echo "TEST_PRODUCT_SET_ID=$PRODUCT_SET_ID" >> $GITHUB_ENV
+          else
+            echo "❌ FAILED: Could not create product set"
+            echo "================================================================"
+            echo ""
+            if [ "$ERROR_SUBCODE" = "1798130" ]; then
+              echo "🔴 ROOT CAUSE IDENTIFIED:"
+              echo "   Error: $ERROR_USER_TITLE"
+              echo "   Message: $ERROR_USER_MSG"
+              echo ""
+              echo "📝 FINDING: Meta API requires catalogs to have products before"
+              echo "            creating product sets (error_subcode: 1798130)"
+              echo ""
+              echo "🐛 BUG IN WOOCOMMERCE PLUGIN:"
+              echo "   The plugin tries to sync categories (as product sets) before"
+              echo "   ensuring products exist in the catalog, causing silent failures."
+              echo ""
+              echo "💡 SOLUTION NEEDED:"
+              echo "   1. Sync products BEFORE syncing categories/product sets"
+              echo "   2. Handle error 1798130 gracefully and retry after product sync"
+              echo "   3. Show user-facing error instead of silent logging"
+            else
+              echo "Error Details:"
+              echo "  Code: $ERROR_CODE"
+              echo "  Subcode: $ERROR_SUBCODE"
+              echo "  Message: $ERROR_MESSAGE"
+              echo "  User Title: $ERROR_USER_TITLE"
+              echo "  User Message: $ERROR_USER_MSG"
+            fi
+            echo ""
+            echo "Full Response: $RESPONSE"
+          fi
+          echo "================================================================"
+          echo ""
+          # Don't fail the workflow - we want to see the result either way
+          exit 0
 
       - name: Install WP-CLI
         run: |
@@ -523,7 +637,7 @@ jobs:
 
           echo "Deleting test catalog ID: ${{ env.FB_PRODUCT_CATALOG_ID }}..."
           RESPONSE=$(curl -s -X DELETE \
-            "https://graph.facebook.com/v21.0/${{ env.FB_PRODUCT_CATALOG_ID }}?access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
+            "https://graph.facebook.com/v24.0/${{ env.FB_PRODUCT_CATALOG_ID }}?access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
 
           echo "Response: $RESPONSE"
 
