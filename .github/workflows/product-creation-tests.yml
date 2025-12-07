@@ -838,27 +838,27 @@ jobs:
           path: ${{ env.PLUGIN_PATH }}/test-results/
           retention-days: 7
 
-      - name: Cleanup - Delete Facebook Catalog
-        if: always()
-        run: |
-          if [ -z "${{ env.FB_PRODUCT_CATALOG_ID }}" ]; then
-            echo "⚠️ No catalog ID found, skipping cleanup"
-            exit 0
-          fi
+      # - name: Cleanup - Delete Facebook Catalog
+      #   if: always()
+      #   run: |
+      #     if [ -z "${{ env.FB_PRODUCT_CATALOG_ID }}" ]; then
+      #       echo "⚠️ No catalog ID found, skipping cleanup"
+      #       exit 0
+      #     fi
 
-          echo "Deleting test catalog ID: ${{ env.FB_PRODUCT_CATALOG_ID }}..."
-          RESPONSE=$(curl -s -X DELETE \
-            "https://graph.facebook.com/v24.0/${{ env.FB_PRODUCT_CATALOG_ID }}?access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
+      #     echo "Deleting test catalog ID: ${{ env.FB_PRODUCT_CATALOG_ID }}..."
+      #     RESPONSE=$(curl -s -X DELETE \
+      #       "https://graph.facebook.com/v24.0/${{ env.FB_PRODUCT_CATALOG_ID }}?access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
 
-          echo "Response: $RESPONSE"
+      #     echo "Response: $RESPONSE"
 
-          SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
+      #     SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
 
-          if [ "$SUCCESS" = "true" ]; then
-            echo "✅ Successfully deleted test catalog"
-          else
-            echo "⚠️ Failed to delete catalog or unexpected response"
-            echo "Response: $RESPONSE"
-            # Don't fail the workflow on cleanup errors
-            exit 0
-          fi
+      #     if [ "$SUCCESS" = "true" ]; then
+      #       echo "✅ Successfully deleted test catalog"
+      #     else
+      #       echo "⚠️ Failed to delete catalog or unexpected response"
+      #       echo "Response: $RESPONSE"
+      #       # Don't fail the workflow on cleanup errors
+      #       exit 0
+      #     fi

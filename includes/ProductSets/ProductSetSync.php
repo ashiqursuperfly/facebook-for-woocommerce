@@ -221,8 +221,13 @@ class ProductSetSync {
 
 		try {
 			DebugLogger::log( 'Calling API to create product set' );
-			facebook_for_woocommerce()->get_api()->create_product_set_item( $fb_catalog_id, $fb_product_set_data );
-			DebugLogger::log( 'API create product set SUCCESS' );
+			$response = facebook_for_woocommerce()->get_api()->create_product_set_item( $fb_catalog_id, $fb_product_set_data );
+
+			$created_id = $response->get_id();
+			DebugLogger::log( 'API create product set SUCCESS', array(
+				'created_product_set_id' => $created_id,
+				'response_data' => $response->get_data(),
+			) );
 		} catch ( \Exception $e ) {
 			$message = sprintf( 'There was an error trying to create product set: %s', $e->getMessage() );
 			facebook_for_woocommerce()->log( $message );
