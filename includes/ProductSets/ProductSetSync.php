@@ -163,9 +163,9 @@ class ProductSetSync {
 			$response = facebook_for_woocommerce()->get_api()->read_product_set_item( $fb_catalog_id, $retailer_id );
 
 			$product_set_id = $response->get_product_set_id();
-
 			DebugLogger::log( 'API read product set response', array(
 				'product_set_id' => $product_set_id,
+				'raw_response'   => method_exists( $response, 'get_data' ) ? wp_json_encode( $response->get_data() ) : wp_json_encode( $response ),
 			) );
 
 			return $product_set_id;
