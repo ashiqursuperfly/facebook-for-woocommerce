@@ -821,6 +821,15 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      - name: Upload custom debug log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fb-product-set-sync-debug-log
+          path: /tmp/fb-product-set-sync-debug.log
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Upload test videos/screenshots
         uses: actions/upload-artifact@v4
         if: failure()

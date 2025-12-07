@@ -2,7 +2,7 @@
 /**
  * Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
  *
- * This source code is licensed under the license fo§und in the
+ * This source code is licensed under the license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @package FacebookCommerce
@@ -15,6 +15,8 @@ defined( 'ABSPATH' ) || exit;
 use WooCommerce\Facebook\RolloutSwitches;
 use WooCommerce\Facebook\Utilities\Heartbeat;
 use WC_Facebookcommerce_Utils;
+
+require_once __DIR__ . '/DebugLogger.php';
 
 /**
  * The product set sync handler.
@@ -97,15 +99,31 @@ class ProductSetSync {
 	 * @since 3.4.9
 	 */
 	public function sync_all_product_sets() {
+		DebugLogger::log( '=== sync_all_product_sets() CALLED ===' );
+
 		try {
 			$flag_name = '_wc_facebook_for_woocommerce_product_sets_sync_flag';
-			if ( 'yes' === get_transient( $flag_name ) ) {
+			$flag_value = get_transient( $flag_name );
+
+			DebugLogger::log( 'Checking sync throttle flag', array(
+				'flag_name' => $flag_name,
+				'flag_value' => $flag_value,
+			) );
+
+			if ( 'yes' === $flag_value ) {
+				DebugLogger::log( 'Sync throttled - exiting (already synced within 24 hours)' );
 				return;
 			}
+
+			DebugLogger::log( 'Setting sync throttle flag for 24 hours' );
 			set_transient( $flag_name, 'yes', DAY_IN_SECONDS - 1 );
 
+			DebugLogger::log( 'Calling sync_all_wc_product_categories()' );
 			$this->sync_all_wc_product_categories();
+
+			DebugLogger::log( '=== sync_all_product_sets() COMPLETED ===' );
 		} catch ( \Exception $exception ) {
+			DebugLogger::log_exception( $exception, 'sync_all_product_sets() FAILED' );
 			$this->log_exception( $exception );
 		}
 	}
@@ -135,19 +153,33 @@ class ProductSetSync {
 		$retailer_id   = $this->get_retailer_id( $wc_category );
 		$fb_catalog_id = facebook_for_woocommerce()->get_integration()->get_product_catalog_id();
 
+		DebugLogger::log( 'get_fb_product_set_id() called', array(
+			'retailer_id' => $retailer_id,
+			'fb_catalog_id' => $fb_catalog_id,
+		) );
+
 		try {
+			DebugLogger::log( 'Calling API to read product set' );
 			$response = facebook_for_woocommerce()->get_api()->read_product_set_item( $fb_catalog_id, $retailer_id );
+
+			$product_set_id = $response->get_product_set_id();
+
+			DebugLogger::log( 'API read product set response', array(
+				'product_set_id' => $product_set_id,
+			) );
+
+			return $product_set_id;
 		} catch ( \Exception $e ) {
 			$message = sprintf( 'There was an error trying to get product set data in a catalog: %s', $e->getMessage() );
 			facebook_for_woocommerce()->log( $message );
+
+			DebugLogger::log_exception( $e, 'get_fb_product_set_id() - API read failed' );
 
 			/**
 			 * Re-throw the exception to prevent potential issues, such as creating duplicate sets.
 			 */
 			throw $e;
 		}
-
-		return $response->get_product_set_id();
 	}
 
 	protected function build_fb_product_set_data( $wc_category ) {
@@ -182,22 +214,40 @@ class ProductSetSync {
 		$fb_product_set_data = $this->build_fb_product_set_data( $wc_category );
 		$fb_catalog_id       = facebook_for_woocommerce()->get_integration()->get_product_catalog_id();
 
+		DebugLogger::log( 'create_fb_product_set() called', array(
+			'catalog_id' => $fb_catalog_id,
+			'product_set_data' => $fb_product_set_data,
+		) );
+
 		try {
+			DebugLogger::log( 'Calling API to create product set' );
 			facebook_for_woocommerce()->get_api()->create_product_set_item( $fb_catalog_id, $fb_product_set_data );
+			DebugLogger::log( 'API create product set SUCCESS' );
 		} catch ( \Exception $e ) {
 			$message = sprintf( 'There was an error trying to create product set: %s', $e->getMessage() );
 			facebook_for_woocommerce()->log( $message );
+			DebugLogger::log_exception( $e, 'create_fb_product_set() FAILED' );
+			throw $e;
 		}
 	}
 
 	protected function update_fb_product_set( $wc_category, $fb_product_set_id ) {
 		$fb_product_set_data = $this->build_fb_product_set_data( $wc_category );
 
+		DebugLogger::log( 'update_fb_product_set() called', array(
+			'product_set_id' => $fb_product_set_id,
+			'product_set_data' => $fb_product_set_data,
+		) );
+
 		try {
+			DebugLogger::log( 'Calling API to update product set' );
 			facebook_for_woocommerce()->get_api()->update_product_set_item( $fb_product_set_id, $fb_product_set_data );
+			DebugLogger::log( 'API update product set SUCCESS' );
 		} catch ( \Exception $e ) {
 			$message = sprintf( 'There was an error trying to update product set: %s', $e->getMessage() );
 			facebook_for_woocommerce()->log( $message );
+			DebugLogger::log_exception( $e, 'update_fb_product_set() FAILED' );
+			throw $e;
 		}
 	}
 
@@ -212,6 +262,8 @@ class ProductSetSync {
 	}
 
 	private function sync_all_wc_product_categories() {
+		DebugLogger::log( '=== sync_all_wc_product_categories() STARTED ===' );
+
 		$wc_product_categories = get_terms(
 			array(
 				'taxonomy'   => self::WC_PRODUCT_CATEGORY_TAXONOMY,
@@ -221,17 +273,47 @@ class ProductSetSync {
 			)
 		);
 
+		DebugLogger::log( 'Found WooCommerce categories', array(
+			'count' => count( $wc_product_categories ),
+			'categories' => array_map( function( $cat ) {
+				return array(
+					'term_id' => $cat->term_id,
+					'name' => $cat->name,
+					'term_taxonomy_id' => $cat->term_taxonomy_id,
+				);
+			}, $wc_product_categories ),
+		) );
+
 		foreach ( $wc_product_categories as $wc_category ) {
+			DebugLogger::log( sprintf( 'Processing category: %s (ID: %d)', $wc_category->name, $wc_category->term_id ) );
+
 			try {
+				DebugLogger::log( 'Getting FB product set ID for category', array(
+					'term_id' => $wc_category->term_id,
+					'retailer_id' => $this->get_retailer_id( $wc_category ),
+				) );
+
 				$fb_product_set_id = $this->get_fb_product_set_id( $wc_category );
+
+				DebugLogger::log( 'FB product set ID retrieved', array(
+					'fb_product_set_id' => $fb_product_set_id,
+				) );
+
 				if ( ! empty( $fb_product_set_id ) ) {
+					DebugLogger::log( 'Product set exists - updating' );
 					$this->update_fb_product_set( $wc_category, $fb_product_set_id );
+					DebugLogger::log( 'Product set updated successfully' );
 				} else {
+					DebugLogger::log( 'Product set does not exist - creating' );
 					$this->create_fb_product_set( $wc_category );
+					DebugLogger::log( 'Product set created successfully' );
 				}
 			} catch ( \Exception $exception ) {
+				DebugLogger::log_exception( $exception, sprintf( 'Error syncing category: %s', $wc_category->name ) );
 				$this->log_exception( $exception );
 			}
 		}
+
+		DebugLogger::log( '=== sync_all_wc_product_categories() COMPLETED ===' );
 	}
 }
