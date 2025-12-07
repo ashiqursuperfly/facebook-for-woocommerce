@@ -388,6 +388,7 @@ jobs:
           wp option update wc_facebook_has_authorized_pages_read_engagement "yes" --allow-root
           wp option update wc_facebook_enable_product_sync "yes" --allow-root
           wp option update wc_facebook_page_id  "${{ secrets.FB_PAGE_ID }}" --allow-root
+          wp option update _transient__wc_facebook_for_woocommerce_product_sets_sync_flag  yes --allow-root
 
           # Activate the plugin (this triggers automatic sync)
           wp plugin activate facebook-for-woocommerce --allow-root
@@ -665,7 +666,7 @@ jobs:
 
           echo "6️⃣ Checking WooCommerce log status option:"
           cd ${{ env.WORDPRESS_PATH }}
-          LOG_STATUS=$(wp option get woocommerce_logs_location --allow-root 2>/dev/null || echo "option not set")
+          LOG_STATUS=$(wp option get w --allow-root 2>/dev/null || echo "option not set")
           echo "WooCommerce logs location setting: $LOG_STATUS"
           echo ""
 
