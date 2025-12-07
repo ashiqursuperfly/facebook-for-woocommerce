@@ -373,6 +373,13 @@ jobs:
             cd ${{ env.WORDPRESS_PATH }}
           fi
 
+          # Force enable WooCommerce logging BEFORE plugin activation
+          echo "🔧 Force-enabling WooCommerce logging..."
+          wp option update woocommerce_logging_enabled "yes" --allow-root
+          wp option update woocommerce_log_handler "WC_Log_Handler_File" --allow-root
+          wp option update woocommerce_log_threshold "debug" --allow-root
+          echo "✅ WooCommerce logging forced to enabled with debug level"
+
           # Configure Facebook connection before activation
           wp option update wc_facebook_access_token "${{ secrets.FB_ACCESS_TOKEN_NEW }}" --allow-root
           wp option update wc_facebook_merchant_access_token "${{ secrets.FB_ACCESS_TOKEN_NEW }}" --allow-root
@@ -388,10 +395,77 @@ jobs:
           wp option update wc_facebook_has_authorized_pages_read_engagement "yes" --allow-root
           wp option update wc_facebook_enable_product_sync "yes" --allow-root
           wp option update wc_facebook_page_id  "${{ secrets.FB_PAGE_ID }}" --allow-root
-          wp option update _transient__wc_facebook_for_woocommerce_product_sets_sync_flag  yes --allow-root
+
+          # DO NOT set the sync flag - we want to force a sync
+          # wp option update _transient__wc_facebook_for_woocommerce_product_sets_sync_flag  yes --allow-root
 
           # Activate the plugin (this triggers automatic sync)
           wp plugin activate facebook-for-woocommerce --allow-root
+
+      - name: Force category sync and capture logs
+        run: |
+          cd ${{ env.WORDPRESS_PATH }}
+
+          echo "================================================================"
+          echo "🔧 Manually triggering category sync to generate logs..."
+          echo "================================================================"
+          echo ""
+
+          # Check WooCommerce logging status
+          echo "📋 WooCommerce logging configuration:"
+          wp option get woocommerce_logging_enabled --allow-root
+          wp option get woocommerce_log_handler --allow-root
+          wp option get woocommerce_log_threshold --allow-root
+          echo ""
+
+          # Delete the sync flag to allow immediate sync
+          echo "🗑️ Deleting sync throttle flag..."
+          wp transient delete _wc_facebook_for_woocommerce_product_sets_sync_flag --allow-root
+          echo "✅ Sync throttle removed"
+          echo ""
+
+          # Manually trigger category sync
+          echo "▶️ Triggering category sync..."
+          wp eval "
+            if (function_exists('facebook_for_woocommerce')) {
+                echo '✅ Facebook plugin loaded' . PHP_EOL;
+
+                // Get the product sets sync handler
+                \$sync_handler = facebook_for_woocommerce()->get_product_sets_sync_handler();
+                if (\$sync_handler) {
+                    echo '✅ Product sets sync handler available' . PHP_EOL;
+
+                    try {
+                        // Force sync all categories
+                        \$sync_handler->sync_all_product_sets();
+                        echo '✅ sync_all_product_sets() completed' . PHP_EOL;
+                    } catch (Exception \$e) {
+                        echo '❌ Exception during sync: ' . \$e->getMessage() . PHP_EOL;
+                        echo 'Trace: ' . \$e->getTraceAsString() . PHP_EOL;
+                    }
+                } else {
+                    echo '❌ Product sets sync handler NOT available' . PHP_EOL;
+                }
+            } else {
+                echo '❌ Facebook plugin NOT loaded' . PHP_EOL;
+            }" --allow-root
+          echo ""
+
+          echo "📂 Checking for newly created log files..."
+          # Check if WooCommerce created log directories
+          if [ -d "${{ env.WORDPRESS_PATH }}/wp-content/wc-logs" ]; then
+            echo "✅ wc-logs directory exists now!"
+            ls -lah ${{ env.WORDPRESS_PATH }}/wp-content/wc-logs/
+          elif [ -d "${{ env.WORDPRESS_PATH }}/wp-content/uploads/wc-logs" ]; then
+            echo "✅ uploads/wc-logs directory exists now!"
+            ls -lah ${{ env.WORDPRESS_PATH }}/wp-content/uploads/wc-logs/
+          else
+            echo "❌ Still no WooCommerce log directories created"
+            echo "This indicates logging is not working or no logs were generated"
+          fi
+          echo ""
+
+          echo "================================================================"
 
       # - name: Initialize rollout switches for E2E tests
       #   run: |
@@ -677,9 +751,55 @@ jobs:
           done || echo "No Facebook-specific log files found"
           echo ""
 
+          echo "8️⃣ Checking WooCommerce logging settings:"
+          cd ${{ env.WORDPRESS_PATH }}
+          WC_LOGGING=$(wp option get woocommerce_logging_enabled --allow-root 2>/dev/null || echo "not set")
+          echo "WooCommerce logging enabled: $WC_LOGGING"
+          WC_LOG_HANDLER=$(wp option get woocommerce_log_handler --allow-root 2>/dev/null || echo "not set")
+          echo "WooCommerce log handler: $WC_LOG_HANDLER"
+          WC_LOG_DIRECTORY=$(wp option get woocommerce_log_directory --allow-root 2>/dev/null || echo "not set")
+          echo "WooCommerce log directory: $WC_LOG_DIRECTORY"
+          echo ""
+
+          echo "9️⃣ Extracting Facebook-related errors from debug.log:"
+          if [ -f "${{ env.WP_DEBUG_LOG }}" ]; then
+            echo "Searching for ProductSetSync, facebook, and catalog-related errors..."
+            grep -i "productset\|facebook.*error\|facebook.*exception\|catalog.*error" ${{ env.WP_DEBUG_LOG }} | head -n 50 || echo "No Facebook-related errors found in debug.log"
+          else
+            echo "debug.log not found"
+          fi
+          echo ""
+
           echo "================================================================"
           echo "Investigation complete"
           echo "================================================================"
+
+      - name: Create Facebook-specific log extract
+        if: always()
+        run: |
+          echo "Creating Facebook-specific log extract from debug.log..."
+          if [ -f "${{ env.WP_DEBUG_LOG }}" ]; then
+            # Extract all Facebook plugin related logs
+            grep -i "facebook\|productset\|product_set\|catalog" ${{ env.WP_DEBUG_LOG }} > /tmp/facebook-logs-extract.log 2>/dev/null || echo "No Facebook logs to extract"
+
+            if [ -s /tmp/facebook-logs-extract.log ]; then
+              echo "✅ Created Facebook log extract with $(wc -l < /tmp/facebook-logs-extract.log) lines"
+              echo ""
+              echo "📋 Preview of Facebook log extract (first 20 lines):"
+              head -n 20 /tmp/facebook-logs-extract.log
+              echo ""
+              echo "📋 Preview of Facebook log extract (last 20 lines):"
+              tail -n 20 /tmp/facebook-logs-extract.log
+            else
+              echo "⚠️ No Facebook-related content found in debug.log"
+              echo "This might mean:"
+              echo "  - Facebook plugin hasn't logged anything yet"
+              echo "  - Logging is disabled"
+              echo "  - No errors occurred"
+            fi
+          else
+            echo "❌ debug.log not found at ${{ env.WP_DEBUG_LOG }}"
+          fi
 
       - name: Upload WooCommerce logs
         uses: actions/upload-artifact@v4
@@ -689,6 +809,15 @@ jobs:
           path: |
             ${{ env.WORDPRESS_PATH }}/wp-content/wc-logs/
             ${{ env.WORDPRESS_PATH }}/wp-content/uploads/wc-logs/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Facebook log extract
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: facebook-logs-extract
+          path: /tmp/facebook-logs-extract.log
           retention-days: 7
           if-no-files-found: ignore
 
