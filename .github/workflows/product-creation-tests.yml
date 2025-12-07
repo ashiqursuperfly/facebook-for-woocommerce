@@ -609,6 +609,77 @@ jobs:
           path: ${{ env.WP_DEBUG_LOG }}
           retention-days: 7
 
+      - name: Investigate WooCommerce log locations
+        if: always()
+        run: |
+          echo "================================================================"
+          echo "🔍 Investigating WooCommerce log file locations..."
+          echo "================================================================"
+          echo ""
+
+          echo "📂 WordPress path: ${{ env.WORDPRESS_PATH }}"
+          echo ""
+
+          echo "1️⃣ Listing wp-content directory structure:"
+          ls -la ${{ env.WORDPRESS_PATH }}/wp-content/ || echo "⚠️ wp-content directory not found"
+          echo ""
+
+          echo "2️⃣ Checking for wc-logs directory:"
+          if [ -d "${{ env.WORDPRESS_PATH }}/wp-content/wc-logs" ]; then
+            echo "✅ Found: wp-content/wc-logs/"
+            echo "Contents:"
+            ls -lah ${{ env.WORDPRESS_PATH }}/wp-content/wc-logs/
+          else
+            echo "❌ Not found: wp-content/wc-logs/"
+          fi
+          echo ""
+
+          echo "3️⃣ Checking for uploads/wc-logs directory:"
+          if [ -d "${{ env.WORDPRESS_PATH }}/wp-content/uploads/wc-logs" ]; then
+            echo "✅ Found: wp-content/uploads/wc-logs/"
+            echo "Contents:"
+            ls -lah ${{ env.WORDPRESS_PATH }}/wp-content/uploads/wc-logs/
+          else
+            echo "❌ Not found: wp-content/uploads/wc-logs/"
+          fi
+          echo ""
+
+          echo "4️⃣ Searching for any log files in wp-content:"
+          find ${{ env.WORDPRESS_PATH }}/wp-content/ -name "*.log" -type f 2>/dev/null | while read logfile; do
+            echo "📄 Found log file: $logfile"
+            echo "   Size: $(du -h "$logfile" | cut -f1)"
+            echo "   Modified: $(stat -c '%y' "$logfile" 2>/dev/null || stat -f '%Sm' "$logfile")"
+          done || echo "No .log files found"
+          echo ""
+
+          echo "5️⃣ Checking debug.log specifically:"
+          if [ -f "${{ env.WP_DEBUG_LOG }}" ]; then
+            echo "✅ Found debug.log at: ${{ env.WP_DEBUG_LOG }}"
+            echo "   Size: $(du -h ${{ env.WP_DEBUG_LOG }} | cut -f1)"
+            echo "   Last 10 lines:"
+            tail -n 10 ${{ env.WP_DEBUG_LOG }}
+          else
+            echo "❌ debug.log not found at: ${{ env.WP_DEBUG_LOG }}"
+          fi
+          echo ""
+
+          echo "6️⃣ Checking WooCommerce log status option:"
+          cd ${{ env.WORDPRESS_PATH }}
+          LOG_STATUS=$(wp option get woocommerce_logs_location --allow-root 2>/dev/null || echo "option not set")
+          echo "WooCommerce logs location setting: $LOG_STATUS"
+          echo ""
+
+          echo "7️⃣ Looking for facebook-for-woocommerce specific logs:"
+          find ${{ env.WORDPRESS_PATH }}/wp-content/ -name "*facebook*" -name "*.log" -type f 2>/dev/null | while read fblog; do
+            echo "📄 Found Facebook log: $fblog"
+            echo "   Size: $(du -h "$fblog" | cut -f1)"
+          done || echo "No Facebook-specific log files found"
+          echo ""
+
+          echo "================================================================"
+          echo "Investigation complete"
+          echo "================================================================"
+
       - name: Upload WooCommerce logs
         uses: actions/upload-artifact@v4
         if: always()
@@ -618,6 +689,7 @@ jobs:
             ${{ env.WORDPRESS_PATH }}/wp-content/wc-logs/
             ${{ env.WORDPRESS_PATH }}/wp-content/uploads/wc-logs/
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload test videos/screenshots
         uses: actions/upload-artifact@v4
