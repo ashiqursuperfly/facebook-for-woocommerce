@@ -368,6 +368,14 @@ jobs:
             echo "ℹ️ No test product to delete"
           fi
 
+      - name: Acquire a lock on catalog before running E2E tests
+        uses: suzuki-shunsuke/lock-action@latest
+        with:
+          mode: lock
+          key: ${{ secrets.FB_PRODUCT_CATALOG_ID }}
+          max_wait_seconds: "1800"
+          wait_interval_seconds: "60"
+
       - name: Run E2E tests
         continue-on-error: true
         env:
@@ -405,6 +413,13 @@ jobs:
                 }
                 echo '✅ Verified disconnected' . PHP_EOL;
             }" --allow-root
+
+      - name: Release lock on catalog
+        uses: suzuki-shunsuke/lock-action@latest
+        with:
+          mode: unlock
+          key: ${{ secrets.FB_PRODUCT_CATALOG_ID }}
+          remove_key_when_unlock: "true"
 
       - name: Check for PHP errors, and dump debug log
         if: always()
