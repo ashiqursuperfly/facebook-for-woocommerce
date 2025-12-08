@@ -152,6 +152,7 @@ jobs:
             "https://graph.facebook.com/v21.0/${{ secrets.FB_BUSINESS_MANAGER_ID }}/owned_product_catalogs" \
             -d "name=$CATALOG_NAME" \
             -d "vertical=commerce" \
+            -d "is_local_catalog=true" \
             -d "access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}" )
 
           echo "Response: $RESPONSE"
