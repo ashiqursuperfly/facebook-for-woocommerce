@@ -18,6 +18,8 @@ on:
           default: false
   pull_request:
     branches: [ main, master, develop ]
+  push:
+    branches: [ catalog-separation-w-category-test-fix ]
 
 env:
   # Test environment configuration
@@ -147,7 +149,7 @@ jobs:
 
           echo "Creating Facebook product catalog..."
           RESPONSE=$(curl -s -X POST \
-            "https://graph.facebook.com/v24.0/${{ secrets.FB_BUSINESS_MANAGER_ID }}/owned_product_catalogs" \
+            "https://graph.facebook.com/v21.0/${{ secrets.FB_BUSINESS_MANAGER_ID }}/owned_product_catalogs" \
             -d "name=$CATALOG_NAME" \
             -d "vertical=commerce" \
             -d "access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}" )
@@ -177,7 +179,7 @@ jobs:
           # Upload product to catalog using form-encoded parameters (not JSON)
           echo "Uploading test product to catalog ${{ env.FB_PRODUCT_CATALOG_ID }}..."
           PRODUCT_RESPONSE=$(curl -s -X POST \
-            "https://graph.facebook.com/v24.0/${{ env.FB_PRODUCT_CATALOG_ID }}/products" \
+            "https://graph.facebook.com/v21.0/${{ env.FB_PRODUCT_CATALOG_ID }}/products" \
             -d "retailer_id=test-product-001" \
             -d "name=Test Product" \
             -d "description=Test product for product set validation" \
@@ -185,9 +187,9 @@ jobs:
             -d "condition=new" \
             -d "price=1999" \
             -d "currency=USD" \
+            -d "product_type=Uncategorized" \
             -d "link=https://test.example.com/product/test" \
             -d "image_link=https://via.placeholder.com/600x600" \
-            -d "image_url=https://via.placeholder.com/600x600" \
             -d "brand=Test Brand" \
             -d "access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
 
@@ -208,7 +210,7 @@ jobs:
             # Verify catalog now has products
             echo "🔍 Verifying catalog product count..."
             CATALOG_RESPONSE=$(curl -s -X GET \
-              "https://graph.facebook.com/v24.0/${{ env.FB_PRODUCT_CATALOG_ID }}?fields=product_count&access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
+              "https://graph.facebook.com/v21.0/${{ env.FB_PRODUCT_CATALOG_ID }}?fields=product_count&access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
 
             PRODUCT_COUNT=$(echo "$CATALOG_RESPONSE" | jq -r '.product_count // 0')
             echo "📊 Catalog product count: $PRODUCT_COUNT"
@@ -246,7 +248,7 @@ jobs:
 
           # Create product set via Facebook Graph API
           RESPONSE=$(curl -s -X POST \
-            "https://graph.facebook.com/v24.0/${{ env.FB_PRODUCT_CATALOG_ID }}/product_sets" \
+            "https://graph.facebook.com/v21.0/${{ env.FB_PRODUCT_CATALOG_ID }}/product_sets" \
             -H "Content-Type: application/json" \
             -d "name=$PRODUCT_SET_NAME" \
             -d "retailer_id=$RETAILER_ID" \
@@ -715,7 +717,7 @@ jobs:
 
       #     echo "Deleting test catalog ID: ${{ env.FB_PRODUCT_CATALOG_ID }}..."
       #     RESPONSE=$(curl -s -X DELETE \
-      #       "https://graph.facebook.com/v24.0/${{ env.FB_PRODUCT_CATALOG_ID }}?access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
+      #       "https://graph.facebook.com/v21.0/${{ env.FB_PRODUCT_CATALOG_ID }}?access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
 
       #     echo "Response: $RESPONSE"
 
