@@ -32,6 +32,18 @@ async function loginToWordPress(page) {
   loginButton.waitFor({ state: 'attached', timeout: TIMEOUTS.MAX });
   await loginButton.click();
 
+  let loginSuccess = false;
+  await page.waitForURL(/\/wp-admin\/$/, { timeout: TIMEOUTS.MEDIUM }).catch(() => {
+    console.warn('⚠️ URL did not change after login. Current URL: ' + page.url());
+    loginSuccess = false;
+  });
+
+  if (!loginSuccess) {
+    await loginButton.click();
+    console.warn(`⚠️ Encountered Wordpress Login button bug. Clicking Login did not change url. Current url: ${page.url()} Clicked Login button again`);
+    await page.waitForTimeout(TIMEOUTS.MEDIUM);
+  }
+
   // Wait for login to complete by waiting for admin content
   await loggedInContent.waitFor({ state: 'visible', timeout: TIMEOUTS.MAX });
   console.log('✅ Login completed');
@@ -108,9 +120,23 @@ async function publishProduct(page) {
   await publishButton.waitFor({ state: 'attached', timeout: TIMEOUTS.LONG });
   await publishButton.click();
   console.log('Clicked Publish button');
-  await page.waitForURL(/\/wp-admin\/post\.php\?post=\d+&action=edit$/, { timeout: TIMEOUTS.MAX });
-  await page.waitForLoadState('domcontentloaded', { timeout: TIMEOUTS.MAX });
+  let publishSuccess = false;
+  await page.waitForURL(/\/wp-admin\/post\.php\?post=\d+/, { timeout: TIMEOUTS.MEDIUM }).catch(() => {
+      console.warn('⚠️ URL did not change after publishing. Current URL: ' + page.url())
+      publishSuccess = false;
+    }
+  );
 
+  if (!publishSuccess) {
+    await publishButton.click();
+    console.warn(`⚠️ Encountered Wordpress Publish button bug. Clicking Publish did not change url. Current url: ${page.url()} Clicked Publish button again`);
+    await page.waitForTimeout(TIMEOUTS.MEDIUM);
+  }
+
+  let updateButton = page.getByRole('button', { name: 'Update' });
+  await updateButton.waitFor({ state: 'visible', timeout: TIMEOUTS.LONG });
+
+  await page.waitForLoadState('domcontentloaded', { timeout: TIMEOUTS.MAX });
   console.log('✅ Published product');
   return true;
 }
