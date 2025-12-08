@@ -197,6 +197,28 @@ jobs:
           if [ -n "$PRODUCT_ID" ]; then
             echo "✅ Successfully added test product with ID: $PRODUCT_ID"
             echo "TEST_CATALOG_PRODUCT_ID=$PRODUCT_ID" >> $GITHUB_ENV
+
+            echo ""
+            echo "⏳ Waiting 60 seconds for Facebook to index the product..."
+            echo "Why? Facebook needs time to index newly created products before product sets can reference them"
+            sleep 60
+            echo "✅ Wait completed - catalog should now be ready for product set creation"
+            echo ""
+
+            # Verify catalog now has products
+            echo "🔍 Verifying catalog product count..."
+            CATALOG_RESPONSE=$(curl -s -X GET \
+              "https://graph.facebook.com/v24.0/${{ env.FB_PRODUCT_CATALOG_ID }}?fields=product_count&access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
+
+            PRODUCT_COUNT=$(echo "$CATALOG_RESPONSE" | jq -r '.product_count // 0')
+            echo "📊 Catalog product count: $PRODUCT_COUNT"
+
+            if [ "$PRODUCT_COUNT" -gt 0 ]; then
+              echo "✅ Catalog has $PRODUCT_COUNT product(s) - ready for product set creation"
+            else
+              echo "⚠️ WARNING: Catalog still shows 0 products after 60s wait"
+              echo "This might indicate indexing is taking longer than expected"
+            fi
           else
             echo "⚠️ Could not add product to catalog"
             echo "Full Response: $PRODUCT_RESPONSE"
