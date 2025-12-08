@@ -163,9 +163,12 @@ class ProductSetSync {
 			$response = facebook_for_woocommerce()->get_api()->read_product_set_item( $fb_catalog_id, $retailer_id );
 
 			$product_set_id = $response->get_product_set_id();
-			DebugLogger::log( 'API read product set response', array(
+
+			// Log the complete API response
+			DebugLogger::log( 'API read product set - FULL RESPONSE', array(
 				'product_set_id' => $product_set_id,
-				'raw_response'   => method_exists( $response, 'get_data' ) ? wp_json_encode( $response->get_data() ) : wp_json_encode( $response ),
+				'raw_response_data' => $response->response_data,
+				'response_json' => json_encode( $response->response_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ),
 			) );
 
 			return $product_set_id;
@@ -224,9 +227,12 @@ class ProductSetSync {
 			$response = facebook_for_woocommerce()->get_api()->create_product_set_item( $fb_catalog_id, $fb_product_set_data );
 
 			$created_id = $response->get_id();
-			DebugLogger::log( 'API create product set SUCCESS', array(
+
+			// Log the complete API response
+			DebugLogger::log( 'API create product set - FULL RESPONSE', array(
 				'created_product_set_id' => $created_id,
-				'response_data' => $response->get_data(),
+				'raw_response_data' => $response->response_data,
+				'response_json' => json_encode( $response->response_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ),
 			) );
 		} catch ( \Exception $e ) {
 			$message = sprintf( 'There was an error trying to create product set: %s', $e->getMessage() );
@@ -246,8 +252,14 @@ class ProductSetSync {
 
 		try {
 			DebugLogger::log( 'Calling API to update product set' );
-			facebook_for_woocommerce()->get_api()->update_product_set_item( $fb_product_set_id, $fb_product_set_data );
-			DebugLogger::log( 'API update product set SUCCESS' );
+			$response = facebook_for_woocommerce()->get_api()->update_product_set_item( $fb_product_set_id, $fb_product_set_data );
+
+			// Log the complete API response
+			DebugLogger::log( 'API update product set - FULL RESPONSE', array(
+				'success' => $response->is_success(),
+				'raw_response_data' => $response->response_data,
+				'response_json' => json_encode( $response->response_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ),
+			) );
 		} catch ( \Exception $e ) {
 			$message = sprintf( 'There was an error trying to update product set: %s', $e->getMessage() );
 			facebook_for_woocommerce()->log( $message );
