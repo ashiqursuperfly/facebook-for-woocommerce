@@ -190,6 +190,7 @@ jobs:
             -d "product_type=Uncategorized" \
             -d "link=https://test.example.com/product/test" \
             -d "image_link=https://via.placeholder.com/600x600" \
+            -d "image_url=https://via.placeholder.com/600x600" \
             -d "brand=Test Brand" \
             -d "access_token=${{ secrets.FB_ACCESS_TOKEN_NEW }}")
 
