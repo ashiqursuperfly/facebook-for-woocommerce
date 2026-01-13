@@ -1,5 +1,5 @@
 const { chromium } = require('@playwright/test');
-const { TIMEOUTS } = require('./time-constants');
+const { TIMEOUTS } = require('./helpers');
 
 const baseURL = process.env.WORDPRESS_URL;
 
